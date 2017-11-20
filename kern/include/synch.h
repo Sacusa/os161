@@ -151,8 +151,15 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
         char *rwlock_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct spinlock rwlock_splock;
+        struct wchan *rwlock_wchan;
+        int lock_status;           /* Positive => Number of readers */
+                                   /* Negative => Active writer */
+                                   /* Zero     => Lock free */
+        unsigned waiting_readers;
+        unsigned waiting_writers;
+        unsigned wait_time_readers;  /* number of waiting readers. */
+        unsigned wait_time_writers;  /* number of waiting writers. */
 };
 
 struct rwlock * rwlock_create(const char *);
@@ -161,7 +168,7 @@ void rwlock_destroy(struct rwlock *);
 /*
  * Operations:
  *    rwlock_acquire_read  - Get the lock for reading. Multiple threads can
- *                          hold the lock for reading at the same time.
+ *                           hold the lock for reading at the same time.
  *    rwlock_release_read  - Free the lock. 
  *    rwlock_acquire_write - Get the lock for writing. Only one thread can
  *                           hold the write lock at one time.
