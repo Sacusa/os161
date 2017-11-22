@@ -669,6 +669,8 @@ int stoplight(int nargs, char **args) {
 	for (i = 0; i < NCARS; i++) {
 		passed += car_locations[i] == PASSED_CAR ? 1 : 0;
 	}
+
+	kprintf_n("Passed: %d\nNCARS: %d\n", passed, NCARS);
 	if ((test_status == TEST161_SUCCESS) &&
 			(!(failif((passed != NCARS), "failed: not enough cars"))) &&
 			(!(failif((all_quadrant != required_quadrant), "failed: didn't do the right turns"))) &&

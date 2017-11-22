@@ -69,12 +69,18 @@
 #include <test.h>
 #include <synch.h>
 
+struct lock *intersection_lock[4];
+
 /*
  * Called by the driver during initialization.
  */
 
 void
 stoplight_init() {
+	intersection_lock[0] = lock_create("intersection_lock_0");
+	intersection_lock[1] = lock_create("intersection_lock_1");
+	intersection_lock[2] = lock_create("intersection_lock_2");
+	intersection_lock[3] = lock_create("intersection_lock_3");
 	return;
 }
 
@@ -83,6 +89,9 @@ stoplight_init() {
  */
 
 void stoplight_cleanup() {
+	for (int i = 0; i < 4; ++i) {
+		lock_destroy(intersection_lock[i]);
+	}
 	return;
 }
 
@@ -91,9 +100,14 @@ turnright(uint32_t direction, uint32_t index)
 {
 	(void)direction;
 	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	
+	lock_acquire(intersection_lock[direction]);
+
+	inQuadrant(direction, index);
+	leaveIntersection(index);
+	
+	lock_release(intersection_lock[direction]);
+	
 	return;
 }
 void
@@ -101,9 +115,26 @@ gostraight(uint32_t direction, uint32_t index)
 {
 	(void)direction;
 	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	uint32_t target_direction = (direction + 3) % 4;
+
+	/* Sequentially acquire required locks */
+	for (uint32_t i = 0; i < 4; ++i) {
+		if ((i == direction) || (i == target_direction)) {
+			lock_acquire(intersection_lock[i]);
+		}
+	}
+	
+	inQuadrant(direction, index);
+	inQuadrant(target_direction, index);
+	leaveIntersection(index);
+	
+	/* Release the locks in reverse manner */
+	for (uint32_t i = 3; i < 4; --i) {
+		if ((i == direction) || (i == target_direction)) {
+			lock_release(intersection_lock[i]);
+		}
+	}
+	
 	return;
 }
 void
@@ -111,8 +142,27 @@ turnleft(uint32_t direction, uint32_t index)
 {
 	(void)direction;
 	(void)index;
-	/*
-	 * Implement this function.
-	 */
+	uint32_t target_direction0 = (direction + 3) % 4;
+	uint32_t target_direction1 = (target_direction0 + 3) % 4;
+
+	/* Sequentially acquire required locks */
+	for (uint32_t i = 0; i < 4; ++i) {
+		if ((i == direction) || (i == target_direction0) || (i == target_direction1)) {
+			lock_acquire(intersection_lock[i]);
+		}
+	}
+	
+	inQuadrant(direction, index);
+	inQuadrant(target_direction0, index);
+	inQuadrant(target_direction1, index);
+	leaveIntersection(index);
+	
+	/* Release the locks in reverse manner */
+	for (uint32_t i = 3; i < 4; --i) {
+		if ((i == direction) || (i == target_direction0) || (i == target_direction1)) {
+			lock_release(intersection_lock[i]);
+		}
+	}
+	
 	return;
 }

@@ -40,12 +40,25 @@
 #include <test.h>
 #include <synch.h>
 
+struct lock *male_lock;        /* Control access to male whales */
+struct lock *female_lock;      /* Control access to female whales */
+struct lock *matchmaker_lock;  /* Control access to matchmaker whales */
+struct cv *male_cv;            /* Channel for male whales to sleep */
+struct cv *female_cv;          /* Channel for female whales to sleep */
+struct cv *matchmaker_cv;      /* Channel for matchmaker whales to sleep */
+
 /*
  * Called by the driver during initialization.
  */
 
 void whalemating_init() {
-	return;
+	male_lock = lock_create("male_lock");
+	female_lock = lock_create("female_lock");
+	matchmaker_lock = lock_create("matchmaker_lock");
+
+	male_cv = cv_create("male_cv");
+	female_cv = cv_create("female_cv");
+	matchmaker_cv = cv_create("matchmaker_cv");
 }
 
 /*
@@ -54,7 +67,13 @@ void whalemating_init() {
 
 void
 whalemating_cleanup() {
-	return;
+	cv_destroy(male_cv);
+	cv_destroy(female_cv);
+	cv_destroy(matchmaker_cv);
+
+	lock_destroy(male_lock);
+	lock_destroy(female_lock);
+	lock_destroy(matchmaker_lock);
 }
 
 void
@@ -65,6 +84,14 @@ male(uint32_t index)
 	 * Implement this function by calling male_start and male_end when
 	 * appropriate.
 	 */
+	male_start(index);
+
+	lock_acquire(male_lock);
+	cv_wait(male_cv, male_lock);  /* Wait to be woken up matchmaker */
+	lock_release(male_lock);
+
+	male_end(index);
+
 	return;
 }
 
@@ -76,6 +103,14 @@ female(uint32_t index)
 	 * Implement this function by calling female_start and female_end when
 	 * appropriate.
 	 */
+	female_start(index);
+	
+	lock_acquire(female_lock);
+	cv_wait(female_cv, female_lock);  /* Wait to be woken up matchmaker */
+	lock_release(female_lock);
+
+	female_end(index);
+
 	return;
 }
 
@@ -87,5 +122,20 @@ matchmaker(uint32_t index)
 	 * Implement this function by calling matchmaker_start and matchmaker_end
 	 * when appropriate.
 	 */
+	matchmaker_start(index);
+
+	lock_acquire(matchmaker_lock);
+	lock_acquire(male_lock);
+	lock_acquire(female_lock);
+
+	cv_signal(male_cv, male_lock);      /* Get a male whale */
+	cv_signal(female_cv, female_lock);  /* Get a female whale */
+
+	lock_release(female_lock);
+	lock_release(male_lock);
+	lock_release(matchmaker_lock);
+
+	matchmaker_end(index);
+
 	return;
 }
