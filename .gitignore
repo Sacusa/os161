@@ -8,5 +8,6 @@
 build
 /userland/testbin/randcall/calls.c
 /root/
+/.vscode
 *.swo
 *.swp

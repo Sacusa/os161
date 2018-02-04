@@ -48,6 +48,8 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <kern/fcntl.h>
+#include <file_handle.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -81,6 +83,55 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
+
+    /* File Table fields */
+
+	/* 
+	 * Create a file table for non-kernel processes only.
+     * Kernel doesn't need files to access the console.
+	 */
+	if (strcmp(name, "[kernel]")) {
+		char *stdin_str = kstrdup("con:");
+		char *stdout_str = kstrdup("con:");
+		char *stderr_str = kstrdup("con:");
+
+		int result;
+
+		struct file_handle *fh_stdin = NULL;
+		result = fh_create(&fh_stdin, stdin_str, O_RDONLY);
+		if (result) {
+			return NULL;
+		}
+
+		struct file_handle *fh_stdout = NULL;
+		result = fh_create(&fh_stdout, stdout_str, O_WRONLY);
+		if (result) {
+			fh_destroy(fh_stdin);
+			return NULL;
+		}
+
+		struct file_handle *fh_stderr = NULL;
+		result = fh_create(&fh_stderr, stderr_str, O_WRONLY);
+		if (result) {
+			fh_destroy(fh_stdin);
+			fh_destroy(fh_stdout);
+			return NULL;
+		}
+
+		proc->p_ft_size = 4;
+		proc->p_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
+		if (proc->p_ft == NULL) {
+			panic("proc_create: unable to allocate file table memory");
+		}
+
+		proc->p_ft[0] = fh_stdin;
+		proc->p_ft[1] = fh_stdout;
+		proc->p_ft[2] = fh_stderr;
+	}
+	else {
+		proc->p_ft_size = 0;
+		proc->p_ft = NULL;
+	}
 
 	return proc;
 }
@@ -164,6 +215,13 @@ proc_destroy(struct proc *proc)
 		}
 		as_destroy(as);
 	}
+
+    /* File table fields */
+    for (unsigned i = 0; i < proc->p_ft_size; ++i) {
+        fh_destroy(proc->p_ft[i]);
+        proc->p_ft[i] = NULL;
+    }
+    kfree(proc->p_ft);
 
 	KASSERT(proc->p_numthreads == 0);
 	spinlock_cleanup(&proc->p_lock);
@@ -317,4 +375,84 @@ proc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+/*
+ * Assign an empty file descriptor to 'fh' and return it.
+ *
+ * If the table is not full, the first available file descriptor is used.
+ * If the table is full, its size is doubled and the first empty file
+ * descriptor is used.
+ * 
+ * If no index is available (a rare case), -1 is returned.
+ */
+int
+proc_addfile(struct file_handle *fh)
+{
+    KASSERT(fh != NULL);
+
+	struct proc *proc = curproc;
+    int fd = -1;
+
+    spinlock_acquire(&proc->p_lock);
+
+    /* Look for an empty fd within the table */
+    for (unsigned i = 3; i < proc->p_ft_size; ++i) {
+        if (proc->p_ft[i] == NULL) {
+			fd = i;
+            break;
+		}
+    }
+
+    if (fd == -1) {
+        /*
+         * No empty fd found. Resize the table.
+         * This involves creating a new table, copying over the contents of the
+         * old one into the new one, and then destroying the old one.
+         */
+        struct file_handle **new_ft;
+        unsigned old_size = proc->p_ft_size;
+        proc->p_ft_size *= 2;
+
+        new_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
+        if (new_ft == NULL) {
+            return -1;
+        }
+
+        for (unsigned i = 0; i < old_size; ++i) {
+            new_ft[i] = proc->p_ft[i];
+        }
+        for (unsigned i = old_size; i < proc->p_ft_size; ++i) {
+            new_ft[i] = NULL;
+        }
+
+        kfree(proc->p_ft);
+        proc->p_ft = new_ft;
+
+        /* Use the first empty fd from the new table. */
+        fd = old_size;
+    }
+
+    proc->p_ft[fd] = fh;
+    spinlock_release(&proc->p_lock);
+
+    return fd;
+}
+
+/*
+ * Release the file descriptor 'fd' and return the associated file handle.
+ * The file descriptor is recycled, i.e. it is available for use later.
+ */
+struct file_handle *
+proc_remfile(int fd)
+{
+    KASSERT(fd >= 3);
+    KASSERT((unsigned)fd < curproc->p_ft_size);
+
+    spinlock_acquire(&curproc->p_lock);
+    struct file_handle *fh = curproc->p_ft[fd];
+    curproc->p_ft[fd] = NULL;
+    spinlock_release(&curproc->p_lock);
+
+    return fh;
 }
