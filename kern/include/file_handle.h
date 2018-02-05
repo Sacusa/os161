@@ -23,5 +23,8 @@ void fh_destroy(struct file_handle *fh);
 /* Writes the buffer buf of length buflen to the file. */
 int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size);
 
+/* Reads buflen number of bytes into buf from the file. */
+int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size);
+
 #endif /* _FILE_HANDLE_H_ */
 

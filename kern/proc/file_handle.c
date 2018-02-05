@@ -89,23 +89,63 @@ fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)
 
     lock_acquire(fh->fh_lock);
 
-    struct iovec fh_iovec;
-    struct uio fh_uio;
+    struct iovec iov;
+    struct uio uio;
  
-    uio_kinit(&fh_iovec, &fh_uio, buf, buflen, fh->fh_offset, UIO_WRITE);
-    int result = VOP_WRITE(fh->fh_file_obj, &fh_uio);
+    uio_kinit(&iov, &uio, buf, buflen, fh->fh_offset, UIO_WRITE);
+    int result = VOP_WRITE(fh->fh_file_obj, &uio);
     if (result) {
         lock_release(fh->fh_lock);
         return result;
     }
 
+    /* Determine the number of bytes written */
+    *size = uio.uio_offset - fh->fh_offset;
+
     /* Update the file offset information */
-    fh->fh_offset = fh_uio.uio_offset;
+    fh->fh_offset = uio.uio_offset;
 
     lock_release(fh->fh_lock);
 
-    /* Determine the number of bytes written */
-    *size = fh_uio.uio_resid;
+    return 0;
+}
+
+/*
+ * Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'.
+ * The actual number of bytes read are stored in 'size'.
+ * 
+ * Returns 0 on success, error value otherwise.
+ */
+int
+fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)
+{
+    KASSERT(buf != NULL);
+    KASSERT(size != NULL);
+
+    /* Make sure the file is not write-only */
+    if (fh->fh_flags & O_WRONLY) {
+        return EPERM;
+    }
+
+    lock_acquire(fh->fh_lock);
+
+    struct iovec iov;
+    struct uio uio;
+ 
+    uio_kinit(&iov, &uio, buf, buflen, fh->fh_offset, UIO_READ);
+    int result = VOP_READ(fh->fh_file_obj, &uio);
+    if (result) {
+        lock_release(fh->fh_lock);
+        return result;
+    }
+
+    /* Determine the number of bytes read */
+    *size = uio.uio_offset - fh->fh_offset;
+
+    /* Update the file offset information */
+    fh->fh_offset = uio.uio_offset;
+
+    lock_release(fh->fh_lock);
 
     return 0;
 }

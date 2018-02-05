@@ -51,12 +51,15 @@ sys_open(userptr_t user_filename_ptr, int flags, int *fd)
 /*
  * If the write is successful, 0 is returned and the number of bytes written
  * are reflected in 'size'. Otherwise, an error code is returned and
- * 'size' may change.
+ * 'size' is unchanged.
  */
 int
 sys_write(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
 {
-    KASSERT(fd >= 0);
+    /* Make sure the fd is valid */
+    if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
+        return EBADF;
+    }
 
     int result;
 
@@ -64,20 +67,50 @@ sys_write(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
     void *buf = kmalloc(buflen);
     result = copyin(user_buf_ptr, buf, buflen);
     if (result) {
+        kfree(buf);
         return result;
-    }
-
-    /* Make sure the fd is valid */
-    if ((unsigned)fd >= curproc->p_ft_size) {
-        return ENOENT;
     }
 
     result = fh_write(curproc->p_ft[fd], buf, buflen, size);
     if (result) {
+        kfree(buf);
         return result;
     }
 
     kfree(buf);
+    return 0;
+}
 
+/*
+ * If the read is successful, 0 is returned and the number of bytes read
+ * are reflected in 'size'.
+ * Otherwise, an error code is returned and 'size' and 'buffer' are
+ * unchanged.
+ */
+int
+sys_read(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
+{
+    /* Make sure the fd is valid */
+    if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
+        return EBADF;
+    }
+
+    int result;
+
+    void *buf = kmalloc(buflen);
+    result = fh_read(curproc->p_ft[fd], buf, buflen, size);
+    if (result) {
+        kfree(buf);
+        return result;
+    }
+
+    /* Copy the read buffer to user space */
+    result = copyout(buf, user_buf_ptr, buflen);
+    if (result) {
+        kfree(buf);
+        return result;
+    }
+
+    kfree(buf);
     return 0;
 }

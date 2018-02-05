@@ -79,7 +79,11 @@ TODO
 
         int sys_write(int fd, userptr_t user_buf_ptr, size_t buflen, int *size);
 
-    The above function is the kernel-level function that implements the write syscall. The buffer to write is copid into the kernel space using copyin. If the write is successful, 0 is returned and the number of bytes written are reflected in 'size'. Otherwise, an error code is returned and the 'size' may change.
+    The above function is the kernel-level function that implements the write syscall. The buffer to write is copid into the kernel space using copyin. If the write is successful, 0 is returned and the number of bytes written are reflected in 'size'. Otherwise, an error code is returned and 'size' is unchanged.
+
+1. __read__
+
+        int sys_read(int fd, userptr_t user_buf_ptr, size_t buflen, int *size);
 
 ### 7. Exception Handling
 
