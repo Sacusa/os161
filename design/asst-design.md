@@ -85,6 +85,8 @@ TODO
 
         int sys_read(int fd, userptr_t user_buf_ptr, size_t buflen, int *size);
 
+    The above function is the kernel-level function that implements the read syscall. If the read is successful, 0 is returned, the number of bytes read are reflected in 'size', and the read data is copied into user space using copyout. Otherwise, an error code is returned and 'size' and user buffer are unchanged.
+
 ### 7. Exception Handling
 
 TODO
