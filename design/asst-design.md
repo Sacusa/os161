@@ -40,7 +40,7 @@ The following associated methods are provided:
 
 1. __void fh_destroy(struct file_handle *fh)__: Reduces the number of processes associated with the file handle. If the count reaches 0, the file handle is destroyed.
 
-1. A method for reading. Read using uio (as documented in uio.h). Copy void* (in iovec) data to a userptr using copyout.
+1. __int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'. The actual number of bytes read are stored in 'size'. Returns 0 on success, error value otherwise.
 
 1. __int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Writes the buffer pointed to by 'buf', of size buflen, to the file 'fh'. The actual number of bytes written are stored in 'size'. Returns 0 on success, error value otherwise.
 
