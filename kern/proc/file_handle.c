@@ -71,46 +71,6 @@ fh_destroy(struct file_handle *fh)
 }
 
 /*
- * Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'.
- * The actual number of bytes read are stored in 'size'.
- * 
- * Returns 0 on success, error value otherwise.
- */
-int
-fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)
-{
-    KASSERT(buf != NULL);
-    KASSERT(size != NULL);
-
-    /* Make sure the file is not write-only */
-    if (fh->fh_flags & O_WRONLY) {
-        return EPERM;
-    }
-
-    lock_acquire(fh->fh_lock);
-
-    struct iovec iov;
-    struct uio uio;
- 
-    uio_kinit(&iov, &uio, buf, buflen, fh->fh_offset, UIO_READ);
-    int result = VOP_READ(fh->fh_file_obj, &uio);
-    if (result) {
-        lock_release(fh->fh_lock);
-        return result;
-    }
-
-    /* Determine the number of bytes read */
-    *size = uio.uio_offset - fh->fh_offset;
-
-    /* Update the file offset information */
-    fh->fh_offset = uio.uio_offset;
-
-    lock_release(fh->fh_lock);
-
-    return 0;
-}
-
-/*
  * Writes the buffer pointed to by 'buf', of size buflen, to the file 'fh'.
  * The actual number of bytes written are stored in 'size'.
  * 
@@ -140,6 +100,46 @@ fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)
     }
 
     /* Determine the number of bytes written */
+    *size = uio.uio_offset - fh->fh_offset;
+
+    /* Update the file offset information */
+    fh->fh_offset = uio.uio_offset;
+
+    lock_release(fh->fh_lock);
+
+    return 0;
+}
+
+/*
+ * Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'.
+ * The actual number of bytes read are stored in 'size'.
+ * 
+ * Returns 0 on success, error value otherwise.
+ */
+int
+fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)
+{
+    KASSERT(buf != NULL);
+    KASSERT(size != NULL);
+
+    /* Make sure the file is not write-only */
+    if (fh->fh_flags & O_WRONLY) {
+        return EPERM;
+    }
+
+    lock_acquire(fh->fh_lock);
+
+    struct iovec iov;
+    struct uio uio;
+ 
+    uio_kinit(&iov, &uio, buf, buflen, fh->fh_offset, UIO_READ);
+    int result = VOP_READ(fh->fh_file_obj, &uio);
+    if (result) {
+        lock_release(fh->fh_lock);
+        return result;
+    }
+
+    /* Determine the number of bytes read */
     *size = uio.uio_offset - fh->fh_offset;
 
     /* Update the file offset information */

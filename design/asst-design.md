@@ -40,9 +40,9 @@ The following associated methods are provided:
 
 1. __void fh_destroy(struct file_handle *fh)__: Reduces the number of processes associated with the file handle. If the count reaches 0, the file handle is destroyed.
 
-1. __int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'. The actual number of bytes read are stored in 'size'. Returns 0 on success, error value otherwise.
+1. __int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Writes the buffer pointed to by 'buf', of size 'buflen', to the file 'fh'. The actual number of bytes written are stored in 'size'. Returns 0 on success, error value otherwise.
 
-1. __int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Writes the buffer pointed to by 'buf', of size buflen, to the file 'fh'. The actual number of bytes written are stored in 'size'. Returns 0 on success, error value otherwise.
+1. __int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'. The actual number of bytes read are stored in 'size'. Returns 0 on success, error value otherwise.
 
 ### 3. Process Table
 
@@ -79,7 +79,7 @@ TODO
 
         int sys_write(int fd, userptr_t user_buf_ptr, size_t buflen, int *size);
 
-    The above function is the kernel-level function that implements the write syscall. The buffer to write is copid into the kernel space using copyin. If the write is successful, 0 is returned and the number of bytes written are reflected in 'size'. Otherwise, an error code is returned and 'size' is unchanged.
+    The above function is the kernel-level function that implements the write syscall. The buffer to write is copied into the kernel space using copyin. If the write is successful, 0 is returned and the number of bytes written are reflected in 'size'. Otherwise, an error code is returned and 'size' is unchanged.
 
 1. __read__
 
