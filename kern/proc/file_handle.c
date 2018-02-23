@@ -7,6 +7,8 @@
 #include <uio.h>
 #include <kern/errno.h>
 #include <kern/fcntl.h>
+#include <kern/stat.h>
+#include <kern/seek.h>
 
 /*
  * Creates a new file handle to the file 'path' and returns the corresponding
@@ -27,6 +29,12 @@ fh_create(struct file_handle **fh, char *path, int flags)
     struct file_handle *new_fh;
     int result;
 
+    /* Check flags */
+    result = flags & 0x03;
+    if (!((result == 0) || (result == 1) || (result == 2))) {
+        return EINVAL;
+    }
+
     new_fh = kmalloc(sizeof(struct file_handle));
     if (new_fh == NULL) {
         return ENOMEM;
@@ -34,15 +42,36 @@ fh_create(struct file_handle **fh, char *path, int flags)
 
     new_fh->fh_file_obj = kmalloc(sizeof(struct vnode));
     if (new_fh->fh_file_obj == NULL) {
+        kfree(new_fh);
         return ENOMEM;
     }
 
     result = vfs_open(path, flags, 0664, &(new_fh->fh_file_obj));
     if (result) {
+        kfree(new_fh->fh_file_obj);
+        kfree(new_fh);
         return result;
     }
 
-    new_fh->fh_offset = 0;
+    /* Set offset according to flags */
+    if (flags & O_APPEND) {
+        struct stat *file_info = kmalloc(sizeof(struct stat));
+
+        result = VOP_STAT(new_fh->fh_file_obj, file_info);
+        if (result) {
+            kfree(new_fh->fh_file_obj);
+            kfree(new_fh);
+            kfree(file_info);
+            return result;
+        }
+
+        new_fh->fh_offset = file_info->st_size;
+        kfree(file_info);
+    }
+    else {
+        new_fh->fh_offset = 0;
+    }
+
     new_fh->fh_flags = flags & 0x03;
     new_fh->fh_num_assoc_procs = 1;
     new_fh->fh_lock = lock_create(path);
@@ -83,7 +112,7 @@ fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)
     KASSERT(size != NULL);
 
     /* Make sure we have the permission to write */
-    if (!(fh->fh_flags & O_WRONLY)) {
+    if (fh->fh_flags == O_RDONLY) {
         return EPERM;
     }
 
@@ -123,7 +152,7 @@ fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)
     KASSERT(size != NULL);
 
     /* Make sure the file is not write-only */
-    if (fh->fh_flags & O_WRONLY) {
+    if (fh->fh_flags == O_WRONLY) {
         return EPERM;
     }
 
@@ -146,6 +175,55 @@ fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)
     fh->fh_offset = uio.uio_offset;
 
     lock_release(fh->fh_lock);
+
+    return 0;
+}
+
+/*
+ * Seek to a new position based on pos and whence.
+ * The new position is stored in 'new_pos'.
+ * 
+ * Returns 0 on success, error value otherwise.
+ */
+int
+fh_lseek(struct file_handle *fh, off_t pos, int whence, off_t *new_pos)
+{
+    KASSERT(fh != NULL);
+
+    /* Make sure the file is seekable */
+    if (!VOP_ISSEEKABLE(fh->fh_file_obj)) {
+        return ESPIPE;
+    }
+
+    off_t calc_pos = -1;
+
+    if (whence == SEEK_SET) {
+        calc_pos = pos;
+    }
+    else if (whence == SEEK_CUR) {
+        calc_pos = fh->fh_offset + pos;
+    }
+    else if (whence == SEEK_END) {
+        struct stat *file_info = kmalloc(sizeof(struct stat));
+
+        /* Get file info */
+        int result = VOP_STAT(fh->fh_file_obj, file_info);
+        if (result) {
+            kfree(file_info);
+            return result;
+        }
+
+        calc_pos = file_info->st_size + pos;
+
+        kfree(file_info);
+    }
+
+    if (calc_pos < 0) {
+        return EINVAL;
+    }
+
+    fh->fh_offset = calc_pos;
+    *new_pos = calc_pos;
 
     return 0;
 }

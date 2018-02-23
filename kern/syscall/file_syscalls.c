@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <kern/errno.h>
 #include <kern/fcntl.h>
+#include <kern/seek.h>
 #include <vm.h>
 #include <vfs.h>
 #include <copyinout.h>
@@ -60,6 +61,11 @@ sys_write(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
     if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
         return EBADF;
     }
+    else {
+        if (curproc->p_ft[fd] == NULL) {
+            return EBADF;
+        }
+    }
 
     int result;
 
@@ -94,6 +100,11 @@ sys_read(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
     if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
         return EBADF;
     }
+    else {
+        if (curproc->p_ft[fd] == NULL) {
+            return EBADF;
+        }
+    }
 
     int result;
 
@@ -112,5 +123,62 @@ sys_read(int fd, userptr_t user_buf_ptr, size_t buflen, int *size)
     }
 
     kfree(buf);
+    return 0;
+}
+
+/*
+ * Closes the file assocated with file descriptor 'fd'.
+ * 
+ * Returns 0 on success, error code otherwise.
+ */
+int
+sys_close(int fd)
+{
+    /* Make sure the fd is valid */
+    if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
+        return EBADF;
+    }
+    else {
+        if (curproc->p_ft[fd] == NULL) {
+            return EBADF;
+        }
+    }
+
+    fh_destroy(curproc->p_ft[fd]);
+    curproc->p_ft[fd] = NULL;
+
+    return 0;
+}
+
+/*
+ * If the seek is successful, 0 is returned and the new position in file is
+ * reflected in 'new_pos'.
+ * Otherwise, an error code is returned and 'new_pos' is unchanged.
+ */
+int
+sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
+{
+    /* Make sure fd is valid */
+    if (((unsigned)fd >= curproc->p_ft_size) || (fd < 0)) {
+        return EBADF;
+    }
+    else {
+        if (curproc->p_ft[fd] == NULL) {
+            return EBADF;
+        }
+    }
+
+    /* Make sure whence is valid */
+    if ((whence != SEEK_SET) && (whence != SEEK_CUR) && (whence != SEEK_END)) {
+        return EINVAL;
+    }
+
+    int result;
+
+    result = fh_lseek(curproc->p_ft[fd], pos, whence, new_pos);
+    if (result) {
+        return result;
+    }
+
     return 0;
 }

@@ -87,6 +87,12 @@ TODO
 
     The above function is the kernel-level function that implements the read syscall. If the read is successful, 0 is returned, the number of bytes read are reflected in 'size', and the read data is copied into user space using copyout. Otherwise, an error code is returned and 'size' and user buffer are unchanged.
 
+1. __lseek__
+
+        int sys_lseek(int fd, off_t pos, int whence, off_t *new_pos);
+
+    The above function is the kernel-level function that implements the lseek syscall. If the seek is successful, 0 is returned and the new position in file is reflected in 'new_pos'. Otherwise, an error code is returned and 'new_pos' is unchanged.
+
 ### 7. Exception Handling
 
 TODO

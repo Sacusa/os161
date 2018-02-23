@@ -26,5 +26,8 @@ int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size);
 /* Reads buflen number of bytes into buf from the file. */
 int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size);
 
+/* Seek to a new position based on pos and whence. */
+int fh_lseek(struct file_handle *fh, off_t pos, int whence, off_t *new_pos);
+
 #endif /* _FILE_HANDLE_H_ */
 
