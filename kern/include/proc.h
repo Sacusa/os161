@@ -106,5 +106,8 @@ int proc_addfile(struct file_handle *fh);
 /* Release the file descriptor 'fd' and return the associated file handle. */
 struct file_handle *proc_remfile(int fd);
 
+/* Set file descriptor 'fd' to point to file 'fh'. */
+int proc_setfile(int fd, struct file_handle *fh);
+
 
 #endif /* _PROC_H_ */

@@ -10,9 +10,11 @@ The file table is private to each process. It is, however, duplicated whenever f
 
 The file table has been implemented inside the proc structure as an array of file handles. The following methods are provided to operate on it:
 
-1. __int proc_addfile(struct file_handle *fh)__: This finds an available file descriptor and assigns it to the given file handle. The file descriptor is returned. If the table is full, its size is doubled and the first free index is used. If no index is available (a rare case), -1 is returned.
+1. __int proc_addfile(struct file_handle *fh)__: This finds an available file descriptor and assigns it to the given file handle. The file descriptor is returned. proc_setfile() is used for actually setting the value in the file table. If no index is available (a rare case), -1 is returned.
 
 1. __struct file_handle *proc_remfile(int fd)__: Given a file descriptor, it returns the associated file handle and frees up the file descriptor. The file descriptors are recycled, i.e. they can be reused later for some other file.
+
+1. __int proc_setfile(int fd, struct file_handle *fh)__: Sets the file descriptor 'fd' to point to file 'fh'. If fd is beyond the current table's size, table's size is doubled until it becomes greater than 'fd', after which 'fd' is set. Returns 0 on success, error code otherwise.
 
 ### 2. File Handle
 
@@ -30,7 +32,7 @@ The file handle structure, thus, looks like:
         struct vnode *fh_file_obj;
         off_t fh_offset;
         int fh_flags;
-        unsigned fh_num_assoc_procs;
+        unsigned fh_refcount;
         struct lock *fh_lock;
     }
 
@@ -43,6 +45,8 @@ The following associated methods are provided:
 1. __int fh_write(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Writes the buffer pointed to by 'buf', of size 'buflen', to the file 'fh'. The actual number of bytes written are stored in 'size'. Returns 0 on success, error value otherwise.
 
 1. __int fh_read(struct file_handle *fh, void *buf, size_t buflen, int *size)__: Reads 'buflen' number of bytes into the buffer 'buf' from the file 'fh'. The actual number of bytes read are stored in 'size'. Returns 0 on success, error value otherwise.
+
+1. __void fh_inc_refcount(struct file_handle *fh)__: Increases the reference count for file handle 'fh'. This method does not fail.
 
 ### 3. Process Table
 
@@ -92,6 +96,12 @@ TODO
         int sys_lseek(int fd, off_t pos, int whence, off_t *new_pos);
 
     The above function is the kernel-level function that implements the lseek syscall. If the seek is successful, 0 is returned and the new position in file is reflected in 'new_pos'. Otherwise, an error code is returned and 'new_pos' is unchanged.
+
+1. __dup2__
+
+        int sys_dup2(int oldfd, int newfd);
+
+    The above function is the kernel-level function that implements the dup2 syscall. If the change is successful, 0 is returned. Otherwise, the error code is returned.
 
 ### 7. Exception Handling
 

@@ -182,3 +182,49 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 
     return 0;
 }
+
+int
+sys_dup2(int oldfd, int newfd)
+{
+    /* Make sure oldfd is valid */
+    if (((unsigned)oldfd >= curproc->p_ft_size) || (oldfd < 0)) {
+        return EBADF;
+    }
+    else {
+        if (curproc->p_ft[oldfd] == NULL) {
+            return EBADF;
+        }
+    }
+
+    /* Make sure newfd is valid */
+    if (newfd < 0) {
+        return EBADF;
+    }
+
+    /* If newfd = oldfd, nothing to do. */
+    if (oldfd != newfd) {
+        int result;
+
+        /* If newfd is an open file, close it */
+        if ((unsigned)newfd < curproc->p_ft_size) {
+            if (curproc->p_ft[newfd] != NULL) {
+                result = sys_close(newfd);
+                if (result) {
+                    return result;
+                }
+            }
+        }
+
+        struct file_handle *fh = curproc->p_ft[oldfd];
+
+        result = proc_setfile(newfd, fh);
+        if (result) {
+            return result;
+        }
+
+        /* Increase reference count for the file handle */
+        fh_inc_refcount(fh);
+    }
+
+    return 0;
+}

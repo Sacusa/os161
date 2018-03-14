@@ -19,7 +19,7 @@ main(int argc, char **argv)
 	(void) argc;
 	(void) argv;
 	int i, j;
-	int fh, len, ret;
+	int fh, fh2, len, ret;
 	off_t pos;
 
 	const char * filename = "fileonlytest.dat";
@@ -47,8 +47,11 @@ main(int argc, char **argv)
 		}
 	}
 
+	// Test dup2
+	fh2 = dup2(fh, 100);
+
 	// Seek to file start
-	pos = lseek(fh, 0, SEEK_SET);
+	pos = lseek(fh2, 0, SEEK_SET);
 	if (pos != 0) {
 		err(1, "lseek failed: expected %ld, got %ld", 0, pos);
 	}
@@ -58,7 +61,7 @@ main(int argc, char **argv)
 	tprintf("Verifying write.\n");
 
 	for (i = 0; i < BUFFER_COUNT; i++) {
-		len = read(fh, readbuf, sizeof(readbuf));
+		len = read(fh2, readbuf, sizeof(readbuf));
 		if (len != sizeof(readbuf)) {
 			err(1, "read failed");
 		}
@@ -73,10 +76,20 @@ main(int argc, char **argv)
 
 	ret = close(fh);
 	if (ret) {
-		err(1, "Failed to close file\n");
+		err(1, "Failed to close file using first file handle\n");
+	}
+
+	ret = close(fh2);
+	if (ret) {
+		err(1, "Failed to close file using second file handle\n");
 	}
 
 	ret = close(fh);
+	if (!ret) {
+		err(1, "File still open after close\n");
+	}
+
+	ret = close(fh2);
 	if (!ret) {
 		err(1, "File still open after close\n");
 	}

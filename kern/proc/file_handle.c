@@ -73,7 +73,7 @@ fh_create(struct file_handle **fh, char *path, int flags)
     }
 
     new_fh->fh_flags = flags & 0x03;
-    new_fh->fh_num_assoc_procs = 1;
+    new_fh->fh_refcount = 1;
     new_fh->fh_lock = lock_create(path);
 
     *fh = new_fh;
@@ -90,9 +90,9 @@ fh_destroy(struct file_handle *fh)
 {
     KASSERT(fh != NULL);
 
-    fh->fh_num_assoc_procs -= 1;
+    fh->fh_refcount -= 1;
 
-    if (fh->fh_num_assoc_procs == 0) {
+    if (fh->fh_refcount == 0) {
         vfs_close(fh->fh_file_obj);
         lock_destroy(fh->fh_lock);
         kfree(fh);
@@ -197,6 +197,8 @@ fh_lseek(struct file_handle *fh, off_t pos, int whence, off_t *new_pos)
 
     off_t calc_pos = -1;
 
+    lock_acquire(fh->fh_lock);
+
     if (whence == SEEK_SET) {
         calc_pos = pos;
     }
@@ -225,5 +227,18 @@ fh_lseek(struct file_handle *fh, off_t pos, int whence, off_t *new_pos)
     fh->fh_offset = calc_pos;
     *new_pos = calc_pos;
 
+    lock_release(fh->fh_lock);
+
     return 0;
+}
+
+/*
+ * Increase the reference count for file handle 'fh'.
+ */
+void
+fh_inc_refcount(struct file_handle *fh)
+{
+    lock_acquire(fh->fh_lock);
+    fh->fh_refcount += 1;
+    lock_release(fh->fh_lock);
 }

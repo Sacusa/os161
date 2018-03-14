@@ -49,6 +49,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <kern/fcntl.h>
+#include <kern/errno.h>
 #include <file_handle.h>
 
 /*
@@ -63,77 +64,77 @@ static
 struct proc *
 proc_create(const char *name)
 {
-	struct proc *proc;
+    struct proc *proc;
 
-	proc = kmalloc(sizeof(*proc));
-	if (proc == NULL) {
-		return NULL;
-	}
-	proc->p_name = kstrdup(name);
-	if (proc->p_name == NULL) {
-		kfree(proc);
-		return NULL;
-	}
+    proc = kmalloc(sizeof(*proc));
+    if (proc == NULL) {
+        return NULL;
+    }
+    proc->p_name = kstrdup(name);
+    if (proc->p_name == NULL) {
+        kfree(proc);
+        return NULL;
+    }
 
-	proc->p_numthreads = 0;
-	spinlock_init(&proc->p_lock);
+    proc->p_numthreads = 0;
+    spinlock_init(&proc->p_lock);
 
-	/* VM fields */
-	proc->p_addrspace = NULL;
+    /* VM fields */
+    proc->p_addrspace = NULL;
 
-	/* VFS fields */
-	proc->p_cwd = NULL;
+    /* VFS fields */
+    proc->p_cwd = NULL;
 
     /* File Table fields */
 
-	/* 
-	 * Create a file table for non-kernel processes only.
+    /* 
+     * Create a file table for non-kernel processes only.
      * Kernel doesn't need files to access the console.
-	 */
-	if (strcmp(name, "[kernel]")) {
-		char *stdin_str = kstrdup("con:");
-		char *stdout_str = kstrdup("con:");
-		char *stderr_str = kstrdup("con:");
+     */
+    if (strcmp(name, "[kernel]")) {
+        char *stdin_str = kstrdup("con:");
+        char *stdout_str = kstrdup("con:");
+        char *stderr_str = kstrdup("con:");
 
-		int result;
+        int result;
 
-		struct file_handle *fh_stdin = NULL;
-		result = fh_create(&fh_stdin, stdin_str, O_RDONLY);
-		if (result) {
-			return NULL;
-		}
+        struct file_handle *fh_stdin = NULL;
+        result = fh_create(&fh_stdin, stdin_str, O_RDONLY);
+        if (result) {
+            return NULL;
+        }
 
-		struct file_handle *fh_stdout = NULL;
-		result = fh_create(&fh_stdout, stdout_str, O_WRONLY);
-		if (result) {
-			fh_destroy(fh_stdin);
-			return NULL;
-		}
+        struct file_handle *fh_stdout = NULL;
+        result = fh_create(&fh_stdout, stdout_str, O_WRONLY);
+        if (result) {
+            fh_destroy(fh_stdin);
+            return NULL;
+        }
 
-		struct file_handle *fh_stderr = NULL;
-		result = fh_create(&fh_stderr, stderr_str, O_WRONLY);
-		if (result) {
-			fh_destroy(fh_stdin);
-			fh_destroy(fh_stdout);
-			return NULL;
-		}
+        struct file_handle *fh_stderr = NULL;
+        result = fh_create(&fh_stderr, stderr_str, O_WRONLY);
+        if (result) {
+            fh_destroy(fh_stdin);
+            fh_destroy(fh_stdout);
+            return NULL;
+        }
 
-		proc->p_ft_size = 4;
-		proc->p_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
-		if (proc->p_ft == NULL) {
-			panic("proc_create: unable to allocate file table memory");
-		}
+        proc->p_ft_size = 4;
+        proc->p_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
+        if (proc->p_ft == NULL) {
+            panic("proc_create: unable to allocate file table memory");
+        }
 
-		proc->p_ft[0] = fh_stdin;
-		proc->p_ft[1] = fh_stdout;
-		proc->p_ft[2] = fh_stderr;
-	}
-	else {
-		proc->p_ft_size = 0;
-		proc->p_ft = NULL;
-	}
+        proc->p_ft[0] = fh_stdin;
+        proc->p_ft[1] = fh_stdout;
+        proc->p_ft[2] = fh_stderr;
+    }
+    else {
+        proc->p_ft_size = 0;
+        proc->p_ft = NULL;
+    }
 
-	return proc;
+    return proc;
 }
 
 /*
@@ -145,76 +146,76 @@ proc_create(const char *name)
 void
 proc_destroy(struct proc *proc)
 {
-	/*
-	 * You probably want to destroy and null out much of the
-	 * process (particularly the address space) at exit time if
-	 * your wait/exit design calls for the process structure to
-	 * hang around beyond process exit. Some wait/exit designs
-	 * do, some don't.
-	 */
+    /*
+     * You probably want to destroy and null out much of the
+     * process (particularly the address space) at exit time if
+     * your wait/exit design calls for the process structure to
+     * hang around beyond process exit. Some wait/exit designs
+     * do, some don't.
+     */
 
-	KASSERT(proc != NULL);
-	KASSERT(proc != kproc);
+    KASSERT(proc != NULL);
+    KASSERT(proc != kproc);
 
-	/*
-	 * We don't take p_lock in here because we must have the only
-	 * reference to this structure. (Otherwise it would be
-	 * incorrect to destroy it.)
-	 */
+    /*
+     * We don't take p_lock in here because we must have the only
+     * reference to this structure. (Otherwise it would be
+     * incorrect to destroy it.)
+     */
 
-	/* VFS fields */
-	if (proc->p_cwd) {
-		VOP_DECREF(proc->p_cwd);
-		proc->p_cwd = NULL;
-	}
+    /* VFS fields */
+    if (proc->p_cwd) {
+        VOP_DECREF(proc->p_cwd);
+        proc->p_cwd = NULL;
+    }
 
-	/* VM fields */
-	if (proc->p_addrspace) {
-		/*
-		 * If p is the current process, remove it safely from
-		 * p_addrspace before destroying it. This makes sure
-		 * we don't try to activate the address space while
-		 * it's being destroyed.
-		 *
-		 * Also explicitly deactivate, because setting the
-		 * address space to NULL won't necessarily do that.
-		 *
-		 * (When the address space is NULL, it means the
-		 * process is kernel-only; in that case it is normally
-		 * ok if the MMU and MMU- related data structures
-		 * still refer to the address space of the last
-		 * process that had one. Then you save work if that
-		 * process is the next one to run, which isn't
-		 * uncommon. However, here we're going to destroy the
-		 * address space, so we need to make sure that nothing
-		 * in the VM system still refers to it.)
-		 *
-		 * The call to as_deactivate() must come after we
-		 * clear the address space, or a timer interrupt might
-		 * reactivate the old address space again behind our
-		 * back.
-		 *
-		 * If p is not the current process, still remove it
-		 * from p_addrspace before destroying it as a
-		 * precaution. Note that if p is not the current
-		 * process, in order to be here p must either have
-		 * never run (e.g. cleaning up after fork failed) or
-		 * have finished running and exited. It is quite
-		 * incorrect to destroy the proc structure of some
-		 * random other process while it's still running...
-		 */
-		struct addrspace *as;
+    /* VM fields */
+    if (proc->p_addrspace) {
+        /*
+         * If p is the current process, remove it safely from
+         * p_addrspace before destroying it. This makes sure
+         * we don't try to activate the address space while
+         * it's being destroyed.
+         *
+         * Also explicitly deactivate, because setting the
+         * address space to NULL won't necessarily do that.
+         *
+         * (When the address space is NULL, it means the
+         * process is kernel-only; in that case it is normally
+         * ok if the MMU and MMU- related data structures
+         * still refer to the address space of the last
+         * process that had one. Then you save work if that
+         * process is the next one to run, which isn't
+         * uncommon. However, here we're going to destroy the
+         * address space, so we need to make sure that nothing
+         * in the VM system still refers to it.)
+         *
+         * The call to as_deactivate() must come after we
+         * clear the address space, or a timer interrupt might
+         * reactivate the old address space again behind our
+         * back.
+         *
+         * If p is not the current process, still remove it
+         * from p_addrspace before destroying it as a
+         * precaution. Note that if p is not the current
+         * process, in order to be here p must either have
+         * never run (e.g. cleaning up after fork failed) or
+         * have finished running and exited. It is quite
+         * incorrect to destroy the proc structure of some
+         * random other process while it's still running...
+         */
+        struct addrspace *as;
 
-		if (proc == curproc) {
-			as = proc_setas(NULL);
-			as_deactivate();
-		}
-		else {
-			as = proc->p_addrspace;
-			proc->p_addrspace = NULL;
-		}
-		as_destroy(as);
-	}
+        if (proc == curproc) {
+            as = proc_setas(NULL);
+            as_deactivate();
+        }
+        else {
+            as = proc->p_addrspace;
+            proc->p_addrspace = NULL;
+        }
+        as_destroy(as);
+    }
 
     /* File table fields */
     for (unsigned i = 0; i < proc->p_ft_size; ++i) {
@@ -223,11 +224,11 @@ proc_destroy(struct proc *proc)
     }
     kfree(proc->p_ft);
 
-	KASSERT(proc->p_numthreads == 0);
-	spinlock_cleanup(&proc->p_lock);
+    KASSERT(proc->p_numthreads == 0);
+    spinlock_cleanup(&proc->p_lock);
 
-	kfree(proc->p_name);
-	kfree(proc);
+    kfree(proc->p_name);
+    kfree(proc);
 }
 
 /*
@@ -236,10 +237,10 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
-	kproc = proc_create("[kernel]");
-	if (kproc == NULL) {
-		panic("proc_create for kproc failed\n");
-	}
+    kproc = proc_create("[kernel]");
+    if (kproc == NULL) {
+        panic("proc_create for kproc failed\n");
+    }
 }
 
 /*
@@ -251,32 +252,32 @@ proc_bootstrap(void)
 struct proc *
 proc_create_runprogram(const char *name)
 {
-	struct proc *newproc;
+    struct proc *newproc;
 
-	newproc = proc_create(name);
-	if (newproc == NULL) {
-		return NULL;
-	}
+    newproc = proc_create(name);
+    if (newproc == NULL) {
+        return NULL;
+    }
 
-	/* VM fields */
+    /* VM fields */
 
-	newproc->p_addrspace = NULL;
+    newproc->p_addrspace = NULL;
 
-	/* VFS fields */
+    /* VFS fields */
 
-	/*
-	 * Lock the current process to copy its current directory.
-	 * (We don't need to lock the new process, though, as we have
-	 * the only reference to it.)
-	 */
-	spinlock_acquire(&curproc->p_lock);
-	if (curproc->p_cwd != NULL) {
-		VOP_INCREF(curproc->p_cwd);
-		newproc->p_cwd = curproc->p_cwd;
-	}
-	spinlock_release(&curproc->p_lock);
+    /*
+     * Lock the current process to copy its current directory.
+     * (We don't need to lock the new process, though, as we have
+     * the only reference to it.)
+     */
+    spinlock_acquire(&curproc->p_lock);
+    if (curproc->p_cwd != NULL) {
+        VOP_INCREF(curproc->p_cwd);
+        newproc->p_cwd = curproc->p_cwd;
+    }
+    spinlock_release(&curproc->p_lock);
 
-	return newproc;
+    return newproc;
 }
 
 /*
@@ -291,19 +292,19 @@ proc_create_runprogram(const char *name)
 int
 proc_addthread(struct proc *proc, struct thread *t)
 {
-	int spl;
+    int spl;
 
-	KASSERT(t->t_proc == NULL);
+    KASSERT(t->t_proc == NULL);
 
-	spinlock_acquire(&proc->p_lock);
-	proc->p_numthreads++;
-	spinlock_release(&proc->p_lock);
+    spinlock_acquire(&proc->p_lock);
+    proc->p_numthreads++;
+    spinlock_release(&proc->p_lock);
 
-	spl = splhigh();
-	t->t_proc = proc;
-	splx(spl);
+    spl = splhigh();
+    t->t_proc = proc;
+    splx(spl);
 
-	return 0;
+    return 0;
 }
 
 /*
@@ -318,20 +319,20 @@ proc_addthread(struct proc *proc, struct thread *t)
 void
 proc_remthread(struct thread *t)
 {
-	struct proc *proc;
-	int spl;
+    struct proc *proc;
+    int spl;
 
-	proc = t->t_proc;
-	KASSERT(proc != NULL);
+    proc = t->t_proc;
+    KASSERT(proc != NULL);
 
-	spinlock_acquire(&proc->p_lock);
-	KASSERT(proc->p_numthreads > 0);
-	proc->p_numthreads--;
-	spinlock_release(&proc->p_lock);
+    spinlock_acquire(&proc->p_lock);
+    KASSERT(proc->p_numthreads > 0);
+    proc->p_numthreads--;
+    spinlock_release(&proc->p_lock);
 
-	spl = splhigh();
-	t->t_proc = NULL;
-	splx(spl);
+    spl = splhigh();
+    t->t_proc = NULL;
+    splx(spl);
 }
 
 /*
@@ -345,17 +346,17 @@ proc_remthread(struct thread *t)
 struct addrspace *
 proc_getas(void)
 {
-	struct addrspace *as;
-	struct proc *proc = curproc;
+    struct addrspace *as;
+    struct proc *proc = curproc;
 
-	if (proc == NULL) {
-		return NULL;
-	}
+    if (proc == NULL) {
+        return NULL;
+    }
 
-	spinlock_acquire(&proc->p_lock);
-	as = proc->p_addrspace;
-	spinlock_release(&proc->p_lock);
-	return as;
+    spinlock_acquire(&proc->p_lock);
+    as = proc->p_addrspace;
+    spinlock_release(&proc->p_lock);
+    return as;
 }
 
 /*
@@ -365,16 +366,16 @@ proc_getas(void)
 struct addrspace *
 proc_setas(struct addrspace *newas)
 {
-	struct addrspace *oldas;
-	struct proc *proc = curproc;
+    struct addrspace *oldas;
+    struct proc *proc = curproc;
 
-	KASSERT(proc != NULL);
+    KASSERT(proc != NULL);
 
-	spinlock_acquire(&proc->p_lock);
-	oldas = proc->p_addrspace;
-	proc->p_addrspace = newas;
-	spinlock_release(&proc->p_lock);
-	return oldas;
+    spinlock_acquire(&proc->p_lock);
+    oldas = proc->p_addrspace;
+    proc->p_addrspace = newas;
+    spinlock_release(&proc->p_lock);
+    return oldas;
 }
 
 /*
@@ -391,7 +392,7 @@ proc_addfile(struct file_handle *fh)
 {
     KASSERT(fh != NULL);
 
-	struct proc *proc = curproc;
+    struct proc *proc = curproc;
     int fd = -1;
 
     spinlock_acquire(&proc->p_lock);
@@ -399,42 +400,26 @@ proc_addfile(struct file_handle *fh)
     /* Look for an empty fd within the table */
     for (unsigned i = 3; i < proc->p_ft_size; ++i) {
         if (proc->p_ft[i] == NULL) {
-			fd = i;
+            fd = i;
             break;
-		}
+        }
     }
 
     if (fd == -1) {
         /*
-         * No empty fd found. Resize the table.
-         * This involves creating a new table, copying over the contents of the
-         * old one into the new one, and then destroying the old one.
+         * No empty fd found. Assign a fd greater than the table size.
+         * proc_setfile() will take care of resizing the table and setting
+         * the value.
          */
-        struct file_handle **new_ft;
-        unsigned old_size = proc->p_ft_size;
-        proc->p_ft_size *= 2;
-
-        new_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
-        if (new_ft == NULL) {
-            return -1;
-        }
-
-        for (unsigned i = 0; i < old_size; ++i) {
-            new_ft[i] = proc->p_ft[i];
-        }
-        for (unsigned i = old_size; i < proc->p_ft_size; ++i) {
-            new_ft[i] = NULL;
-        }
-
-        kfree(proc->p_ft);
-        proc->p_ft = new_ft;
-
-        /* Use the first empty fd from the new table. */
-        fd = old_size;
+        fd = proc->p_ft_size;
     }
 
-    proc->p_ft[fd] = fh;
-    spinlock_release(&proc->p_lock);
+    int result = proc_setfile(fd, fh);
+    if (result) {
+        return -1;
+    }
+
+    /* Spinlock released by proc_setfile() */
 
     return fd;
 }
@@ -455,4 +440,68 @@ proc_remfile(int fd)
     spinlock_release(&curproc->p_lock);
 
     return fh;
+}
+
+/*
+ * Set file descriptor 'fd' to point to file 'fh'.
+ * 
+ * CAUTION: This function will release the proc spinlock before returning.
+ * 
+ * Returns 0 on success, error code otherwise.
+ */
+int
+proc_setfile(int fd, struct file_handle *fh)
+{
+    KASSERT(fh != NULL);
+    KASSERT(fd >= 0);
+
+    struct proc *proc = curproc;
+
+    /* 
+     * The function may be called from another proc function.
+     * So, make sure we don't try to re-acquire the lock.
+     * Or bad things will happen!
+     */
+    if (!spinlock_do_i_hold(&proc->p_lock)) {
+        spinlock_acquire(&proc->p_lock);
+    }
+
+    if ((unsigned)fd >= proc->p_ft_size) {
+        /*
+         * fd is greater than the table's size. Resize the table.
+         * This involves creating a new table, copying over the contents of the
+         * old one into the new one, and then destroying the old one.
+         */
+        struct file_handle **new_ft;
+        unsigned old_size = proc->p_ft_size;
+
+        /* Determine the new size */
+        unsigned new_size = proc->p_ft_size * 2;
+        while ((unsigned)fd >= new_size) {
+            new_size *= 2;
+        }
+
+        proc->p_ft_size = new_size;
+
+        new_ft = kmalloc(sizeof(struct file_handle *) * new_size);
+        if (new_ft == NULL) {
+            return ENOMEM;
+        }
+
+        for (unsigned i = 0; i < old_size; ++i) {
+            new_ft[i] = proc->p_ft[i];
+        }
+        for (unsigned i = old_size; i < new_size; ++i) {
+            new_ft[i] = NULL;
+        }
+
+        kfree(proc->p_ft);
+        proc->p_ft = new_ft;
+    }
+
+    proc->p_ft[fd] = fh;
+
+    spinlock_release(&curproc->p_lock);
+
+    return 0;
 }
