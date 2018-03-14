@@ -5,6 +5,7 @@
 #include <kern/seek.h>
 #include <vm.h>
 #include <vfs.h>
+#include <vnode.h>
 #include <copyinout.h>
 #include <proc.h>
 #include <current.h>
@@ -183,6 +184,10 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
     return 0;
 }
 
+/*
+ * If the change is successful, 0 is returned.
+ * Otherwise, the error code is returned.
+ */
 int
 sys_dup2(int oldfd, int newfd)
 {
@@ -225,6 +230,56 @@ sys_dup2(int oldfd, int newfd)
         /* Increase reference count for the file handle */
         fh_inc_refcount(fh);
     }
+
+    return 0;
+}
+
+/*
+ * If successful, 0 is returned. Otherwise, the error code is returned.
+ */
+int
+sys_chdir(userptr_t user_pathname_ptr)
+{
+    int result;
+
+    /* Copy the pathname into kernel space */
+    int pathname_len = sizeof(user_pathname_ptr);
+    void *pathname = kmalloc(pathname_len);
+    result = copyin(user_pathname_ptr, pathname, pathname_len);
+    if (result) {
+        kfree(pathname);
+        return result;
+    }
+
+    result = vfs_chdir((char *)pathname);
+    kfree(pathname);
+    if (result) {
+        return result;
+    }
+
+    return 0;
+}
+
+/*
+ * If successful, 0 is returned, the current working directory is stored in the
+ * user buffer and the length of the current working directory is stored in
+ * size. Otherwise, the error code is returned and size is unchanged.
+ */
+int
+sys___getcwd(userptr_t user_buf_ptr, size_t buflen, int *size)
+{
+    struct proc *proc = curproc;
+    int result;
+
+    void *cwd = proc->p_cwd->vn_data;
+    size_t cwdlen = sizeof(*cwd);
+    size_t size_to_copyout = (cwdlen > buflen) ? (buflen) : (cwdlen);
+
+    result = copyout(cwd, user_buf_ptr, size_to_copyout);
+    if (result) {
+        return result;
+    }
+    *size = size_to_copyout;
 
     return 0;
 }

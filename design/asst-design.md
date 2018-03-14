@@ -103,6 +103,18 @@ TODO
 
     The above function is the kernel-level function that implements the dup2 syscall. If the change is successful, 0 is returned. Otherwise, the error code is returned.
 
+1. __chdir__
+
+        int sys_chdir(userptr_t user_pathname_ptr);
+
+    The above function is the kernel-level function that implements the chdir syscall. If successful, 0 is returned. Otherwise, the error code is returned.
+
+1. __\_\_getcwd__
+
+        int sys___getcwd(userptr_t user_buf_ptr, size_t buflen, int *size);
+
+    The above function is the kernel-level function that implements the __getcwd syscall. If successful, 0 is returned, the current working directory is stored in the user buffer and the length of the current working directory is stored in size. Otherwise, the error code is returned and size is unchanged.
+
 ### 7. Exception Handling
 
 TODO

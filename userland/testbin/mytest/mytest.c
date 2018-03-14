@@ -72,6 +72,12 @@ main(int argc, char **argv)
 		}
 	}
 
+	// Test getcwd
+
+	size_t cwdlen = 1024;
+	char cwd[cwdlen];
+	tprintf("cwd: %s\n", getcwd(cwd, cwdlen));
+
 	// Test close
 
 	ret = close(fh);

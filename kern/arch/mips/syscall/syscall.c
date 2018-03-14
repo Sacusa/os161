@@ -137,9 +137,17 @@ syscall(struct trapframe *tf)
 
         case SYS_dup2:
         err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1);
-        if (err == 0) {
+        if (!err) {
             retval = (int32_t)tf->tf_a1;
         }
+        break;
+
+        case SYS_chdir:
+        err = sys_chdir((userptr_t)tf->tf_a0);
+        break;
+
+        case SYS___getcwd:
+        err = sys___getcwd((userptr_t)tf->tf_a0, (size_t)tf->tf_a1, &retval);
         break;
 
         default:
