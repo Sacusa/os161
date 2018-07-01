@@ -51,6 +51,8 @@
 #include <kern/fcntl.h>
 #include <kern/errno.h>
 #include <file_handle.h>
+#include <thread.h>
+#include <proc_table.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -65,6 +67,7 @@ struct proc *
 proc_create(const char *name)
 {
     struct proc *proc;
+    int result;
 
     proc = kmalloc(sizeof(*proc));
     if (proc == NULL) {
@@ -96,17 +99,25 @@ proc_create(const char *name)
         char *stdout_str = kstrdup("con:");
         char *stderr_str = kstrdup("con:");
 
-        int result;
-
         struct file_handle *fh_stdin = NULL;
         result = fh_create(&fh_stdin, stdin_str, O_RDONLY);
         if (result) {
+            kfree(stdin_str);
+            kfree(stdout_str);
+            kfree(stderr_str);
+            kfree(proc->p_name);
+            kfree(proc);
             return NULL;
         }
 
         struct file_handle *fh_stdout = NULL;
         result = fh_create(&fh_stdout, stdout_str, O_WRONLY);
         if (result) {
+            kfree(stdin_str);
+            kfree(stdout_str);
+            kfree(stderr_str);
+            kfree(proc->p_name);
+            kfree(proc);
             fh_destroy(fh_stdin);
             return NULL;
         }
@@ -114,6 +125,11 @@ proc_create(const char *name)
         struct file_handle *fh_stderr = NULL;
         result = fh_create(&fh_stderr, stderr_str, O_WRONLY);
         if (result) {
+            kfree(stdin_str);
+            kfree(stdout_str);
+            kfree(stderr_str);
+            kfree(proc->p_name);
+            kfree(proc);
             fh_destroy(fh_stdin);
             fh_destroy(fh_stdout);
             return NULL;
@@ -122,16 +138,55 @@ proc_create(const char *name)
         proc->p_ft_size = 4;
         proc->p_ft = kmalloc(sizeof(struct file_handle *) * proc->p_ft_size);
         if (proc->p_ft == NULL) {
-            panic("proc_create: unable to allocate file table memory");
+            kfree(stdin_str);
+            kfree(stdout_str);
+            kfree(stderr_str);
+            kfree(proc->p_name);
+            kfree(proc);
+            fh_destroy(fh_stdin);
+            fh_destroy(fh_stdout);
+            fh_destroy(fh_stderr);
+            return NULL;
         }
 
         proc->p_ft[0] = fh_stdin;
         proc->p_ft[1] = fh_stdout;
         proc->p_ft[2] = fh_stderr;
+
+        kfree(stdin_str);
+        kfree(stdout_str);
+        kfree(stderr_str);
     }
     else {
         proc->p_ft_size = 0;
         proc->p_ft = NULL;
+    }
+
+    /* Process Table */
+
+    /* User processes are simply added to this table and assigned a pid. */
+    if (strcmp(name, "[kernel]")) {
+        result = pt_add_proc(global_proc_table, proc, &(proc->p_pid));
+        if (result) {
+            fh_destroy(proc->p_ft[0]);
+            fh_destroy(proc->p_ft[1]);
+            fh_destroy(proc->p_ft[2]);
+            kfree(proc->p_ft);
+            kfree(proc->p_name);
+            kfree(proc);
+            return NULL;
+        }
+    }
+    /* Kernel process creates the process table and gets pid 1. */
+    else {
+        global_proc_table = kmalloc(sizeof(struct proc_table));
+
+        global_proc_table->pt_size = 4;
+        global_proc_table->pt_table = kmalloc(sizeof(struct proc *) * \
+                                              global_proc_table->pt_size);
+        
+        global_proc_table->pt_table[1] = proc;
+        proc->p_pid = 1;
     }
 
     return proc;

@@ -74,6 +74,9 @@ struct proc {
     /* File Table */
     struct file_handle **p_ft;  /* Array of file handle pointers. */
     unsigned p_ft_size;         /* File table size. */
+	
+	/* Process Table */
+	pid_t p_pid;  /* Process ID (pid) */
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

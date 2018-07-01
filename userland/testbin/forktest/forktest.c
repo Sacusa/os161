@@ -196,6 +196,9 @@ test(int nowait)
 	if (depth != 1) {
 		warnx("depth %d, should be 1", depth);
 	}
+	else {
+		tprintf("depth OK for pid0\n");
+	}
 	check();
 
 	pid1 = dofork();
@@ -204,6 +207,9 @@ test(int nowait)
 	depth++;
 	if (depth != 2) {
 		warnx("depth %d, should be 2", depth);
+	}
+	else {
+		tprintf("depth OK for pid1\n");
 	}
 	check();
 
@@ -214,6 +220,9 @@ test(int nowait)
 	if (depth != 3) {
 		warnx("depth %d, should be 3", depth);
 	}
+	else {
+		tprintf("depth OK for pid2\n");
+	}
 	check();
 
 	pid3 = dofork();
@@ -222,6 +231,9 @@ test(int nowait)
 	depth++;
 	if (depth != 4) {
 		warnx("depth %d, should be 4", depth);
+	}
+	else {
+		tprintf("depth OK for pid3\n");
 	}
 	check();
 

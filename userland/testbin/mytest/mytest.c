@@ -24,7 +24,9 @@ main(int argc, char **argv)
 
 	const char * filename = "fileonlytest.dat";
 
-	// Test open
+	/*
+	 * Test open
+	 */
 
 	tprintf("Opening %s\n", filename);
 
@@ -33,7 +35,9 @@ main(int argc, char **argv)
 		err(1, "create failed");
 	}
 
-	// Test write
+	/*
+	 * Test write
+	 */
 
 	tprintf("Writing %d bytes.\n", BUFFER_SIZE * BUFFER_COUNT);
 
@@ -47,7 +51,9 @@ main(int argc, char **argv)
 		}
 	}
 
-	// Test dup2
+	/*
+	 * Test dup2
+	 */
 	fh2 = dup2(fh, 100);
 
 	// Seek to file start
@@ -56,7 +62,9 @@ main(int argc, char **argv)
 		err(1, "lseek failed: expected %ld, got %ld", 0, pos);
 	}
 
-	// Test read
+	/*
+	 * Test read
+	 */
 
 	tprintf("Verifying write.\n");
 
@@ -72,13 +80,17 @@ main(int argc, char **argv)
 		}
 	}
 
-	// Test getcwd
+	/*
+	 * Test cwd
+	 */
 
 	size_t cwdlen = 1024;
 	char cwd[cwdlen];
 	tprintf("cwd: %s\n", getcwd(cwd, cwdlen));
 
-	// Test close
+	/*
+	 * Test close
+	 */
 
 	ret = close(fh);
 	if (ret) {
@@ -98,6 +110,19 @@ main(int argc, char **argv)
 	ret = close(fh2);
 	if (!ret) {
 		err(1, "File still open after close\n");
+	}
+
+	/*
+	 * Test fork
+	 */
+
+	pid_t pid = fork();
+
+	if (pid == 0) {
+		tprintf("Inside child process. My pid = %d.\n", getpid());
+	}
+	else {
+		tprintf("Inside parent process. My pid = %d. Child pid = %d.\n", getpid(), pid);
 	}
   
 	success(TEST161_SUCCESS, SECRET, "/testbin/mytest");

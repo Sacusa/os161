@@ -236,6 +236,8 @@ sys_dup2(int oldfd, int newfd)
 
 /*
  * If successful, 0 is returned. Otherwise, the error code is returned.
+ * 
+ * TODO: Test this
  */
 int
 sys_chdir(userptr_t user_pathname_ptr)
@@ -264,6 +266,8 @@ sys_chdir(userptr_t user_pathname_ptr)
  * If successful, 0 is returned, the current working directory is stored in the
  * user buffer and the length of the current working directory is stored in
  * size. Otherwise, the error code is returned and size is unchanged.
+ * 
+ * TODO: Test this
  */
 int
 sys___getcwd(userptr_t user_buf_ptr, size_t buflen, int *size)

@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <file_syscalls.h>
+#include <proc_syscalls.h>
 
 
 /*
@@ -150,6 +151,18 @@ syscall(struct trapframe *tf)
         err = sys___getcwd((userptr_t)tf->tf_a0, (size_t)tf->tf_a1, &retval);
         break;
 
+        case SYS_fork:
+        err = sys_fork(tf, &retval);
+        break;
+
+        case SYS_getpid:
+        err = sys_getpid(&retval);
+        break;
+
+        case SYS_waitpid:
+        err = sys_waitpid((pid_t)tf->tf_a0, (int*)tf->tf_a1, (int)tf->tf_a2, &retval);
+        break;
+
         default:
         kprintf("Unknown syscall %d\n", callno);
         err = ENOSYS;
@@ -204,7 +217,14 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *argv, long unsigned int argc)
 {
-    (void)tf;
+    (void) argc;  // argc is declared only because switchframe_init requires it
+    struct trapframe *tf = (struct trapframe *)argv;
+    tf->tf_v0 = 0;
+    tf->tf_a3 = 0;
+    tf->tf_epc += 4;
+
+    //DEBUG
+    kprintf("Inside child process!\n");
 }

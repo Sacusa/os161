@@ -50,20 +50,36 @@ The following associated methods are provided:
 
 ### 3. Process Table
 
-TODO
+Addition of support for user processes necessitated the creation of a process table. The following structure has been created for this purpose:
+
+    struct proc_table {
+        struct proc **pt_table;
+        unsigned pt_size;
+    }
+
+The following associated methods are provided:
+
+1. __pid_t pt_add_proc(struct proc *p)__: Adds process 'p' to the process table and returns a process id. Returns 0 on failure. If the size of process table is full, the size is doubled and the first free pid is returned.
+
+1. __void pt_rem_proc(pid_t pid)__: Removes the process associated with process id 'pid' from the process table and notifies all the processes waiting on it.
 
 ### 4. Process Structure
 
-The process structure (as defined in proc.h) has been modified, and now includes the following two fields:
+The process structure (as defined in proc.h) has been modified, and now includes the following fields:
 
-    struct file_handle **p_ft;
-    unsigned p_ft_size;
+    struct file_handle **p_ft;  // process file table
+    unsigned p_ft_size;         // process file table size
+    pid_t p_pid;                // process id
 
 The proc methods have been modified as follows:
 
-1. __proc_create()__: p_ft_size is intitialized to a value of 4. The file table is also, consequently, initialized to a size of 4. File descriptors 0, 1 and 2 are initialized to STDIN, STDOUT and STDERR respectively. File descriptor 3 is initialized to NULL.
+1. __proc_create()__:
+    * p_ft_size is intitialized to a value of 4. The file table is also, consequently, initialized to a size of 4. File descriptors 0, 1 and 2 are initialized to STDIN, STDOUT and STDERR respectively. File descriptor 3 is initialized to NULL.
+    * The process is added to the process table using *pt_add_proc()*, with the returned pid stored in p_pid.
 
-2. __proc_destroy()__: fh_destroy() is called on every file handle in the file table. p_ft is then freed.
+2. __proc_destroy()__:
+    * fh_destroy() is called on every file handle in the file table. p_ft is then freed.
+    * *pt_rem_proc()* is called to remove the process from the process table and notify any processes waiting on it.
 
 ### 5. Synchronization
 
